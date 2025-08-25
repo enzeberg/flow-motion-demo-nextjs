@@ -2,6 +2,7 @@ import { useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { FlowEventStreamService } from '../services/flowEventStream'
 import { type StreamEvent } from '../types/flow'
+import { useErrorHandler } from './useErrorHandler'
 
 interface UseFlowControllerProps {
   isStreaming: boolean
@@ -34,6 +35,13 @@ export const useFlowController = ({
     new FlowEventStreamService()
   )
 
+  // 使用错误处理 Hook
+  const { handleError, retryOperation } = useErrorHandler({
+    onError: (errorDetails) => {
+      addErrorLog(`流式处理出错: ${errorDetails.userMessage}`)
+    },
+  })
+
   // 开始流式处理
   const startStream = useCallback(async () => {
     if (isStreaming) return
@@ -45,15 +53,20 @@ export const useFlowController = ({
     try {
       await streamServiceRef.current.createEventStream(handleStreamEvent)
     } catch (error) {
-      console.error('Stream error:', error)
-      toast.error('流式处理出错')
-      setIsStreaming(false)
-      setStreamStatus('错误')
-      addErrorLog(
-        `流式处理出错: ${error instanceof Error ? error.message : '未知错误'}`
-      )
+      const errorResult = handleError(error, { operation: 'startStream' })
+      
+      if (errorResult.shouldRetry) {
+        await retryOperation(
+          () => streamServiceRef.current.createEventStream(handleStreamEvent),
+          errorResult.errorDetails,
+          { operation: 'startStream' }
+        )
+      } else {
+        setIsStreaming(false)
+        setStreamStatus('错误')
+      }
     }
-  }, [isStreaming, handleStreamEvent, addInfoLog, addErrorLog, setIsStreaming, setStreamStatus])
+  }, [isStreaming, handleStreamEvent, addInfoLog, setIsStreaming, setStreamStatus, handleError, retryOperation])
 
   // 停止流式处理
   const stopStream = useCallback(() => {
@@ -102,15 +115,12 @@ export const useFlowController = ({
           })
         } catch (error) {
           if (mounted) {
-            console.error('Stream error:', error)
-            toast.error('流式处理出错')
-            setIsStreaming(false)
-            setStreamStatus('错误')
-            addErrorLog(
-              `流式处理出错: ${
-                error instanceof Error ? error.message : '未知错误'
-              }`
-            )
+            const errorResult = handleError(error, { operation: 'initializeFlow' })
+            
+            if (!errorResult.shouldRetry) {
+              setIsStreaming(false)
+              setStreamStatus('错误')
+            }
           }
         }
       }

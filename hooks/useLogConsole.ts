@@ -1,12 +1,13 @@
 import { useState, useCallback } from 'react'
 import type { LogEntry } from '../components/LogConsole'
+import type { ExtendedLogEntry, ErrorDetails, ErrorRecoverySuggestion } from '../types/errors'
 
 export const useLogConsole = (maxLogs: number = 100) => {
-  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [logs, setLogs] = useState<ExtendedLogEntry[]>([])
 
   const addLog = useCallback(
-    (message: string, type: LogEntry['type'] = 'info') => {
-      const newLog: LogEntry = {
+    (message: string, type: LogEntry['type'] = 'info', errorDetails?: ErrorDetails, suggestions?: ErrorRecoverySuggestion[]) => {
+      const newLog: ExtendedLogEntry = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date().toLocaleTimeString('zh-CN', {
           hour12: false,
@@ -16,6 +17,9 @@ export const useLogConsole = (maxLogs: number = 100) => {
         }),
         message,
         type,
+        errorDetails,
+        retryable: errorDetails?.retryable,
+        suggestions,
       }
 
       setLogs((prevLogs) => {
@@ -56,8 +60,8 @@ export const useLogConsole = (maxLogs: number = 100) => {
   )
 
   const addErrorLog = useCallback(
-    (message: string) => {
-      addLog(message, 'error')
+    (message: string, errorDetails?: ErrorDetails, suggestions?: ErrorRecoverySuggestion[]) => {
+      addLog(message, 'error', errorDetails, suggestions)
     },
     [addLog]
   )
